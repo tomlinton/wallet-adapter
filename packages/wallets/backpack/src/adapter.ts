@@ -33,7 +33,6 @@ interface BackpackWallet extends EventEmitter<BackpackWalletEvents> {
     signMessage(message: Uint8Array): Promise<Uint8Array | null>;
     connect(): Promise<void>;
     disconnect(): Promise<void>;
-    _handleDisconnect(...args: unknown[]): unknown;
 }
 
 interface BackpackWindow extends Window {
@@ -60,11 +59,12 @@ export class BackpackWalletAdapter extends BaseMessageSignerWalletAdapter {
             ? WalletReadyState.Unsupported
             : WalletReadyState.NotDetected;
 
-    constructor(config: BackpackWalletAdapterConfig = {}) {
+    constructor(_config: BackpackWalletAdapterConfig = {}) {
         super();
         this._connecting = false;
         this._wallet = null;
         this._publicKey = null;
+
         if (this._readyState !== WalletReadyState.Unsupported) {
             scopePollingDetectionStrategy(() => {
                 if (window.backpack?.isBackpack) {
@@ -103,36 +103,29 @@ export class BackpackWalletAdapter extends BaseMessageSignerWalletAdapter {
             const wallet = window!.backpack!;
 
             if (!wallet.isConnected) {
-                const handleDisconnect = wallet._handleDisconnect;
                 try {
                     await new Promise<void>((resolve, reject) => {
-                        const connect = () => {
-                            wallet.off('connect', connect);
+                        const handleConnect = () => {
+                            wallet.off('connect', handleConnect);
                             resolve();
                         };
 
-                        wallet._handleDisconnect = (...args: unknown[]) => {
-                            wallet.off('connect', connect);
+                        // Backpack emits a connect event when it is ready
+                        wallet.on('connect', handleConnect);
+
+                        wallet.connect().catch(() => {
+                            wallet.off('connect', handleConnect);
                             reject(new WalletWindowClosedError());
-                            return handleDisconnect.apply(wallet, args);
-                        };
-
-                        wallet.on('connect', connect);
-
-                        wallet.connect().catch((reason: any) => {
-                            wallet.off('connect', connect);
-                            reject(reason);
                         });
                     });
                 } catch (error: any) {
                     if (error instanceof WalletError) throw error;
                     throw new WalletConnectionError(error?.message, error);
-                } finally {
-                    wallet._handleDisconnect = handleDisconnect;
                 }
             }
 
             if (!wallet.publicKey) throw new WalletAccountError();
+
             let publicKey: PublicKey;
             try {
                 publicKey = new PublicKey(wallet.publicKey.toBytes());
