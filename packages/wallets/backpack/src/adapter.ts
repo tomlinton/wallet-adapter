@@ -167,23 +167,22 @@ export class BackpackWalletAdapter extends BaseMessageSignerWalletAdapter {
 
     async sendTransaction(
         transaction: Transaction,
-        connection: Connection,
+        _connection: Connection,
         options?: SendTransactionOptions
     ): Promise<TransactionSignature> {
         try {
             const wallet = this._wallet;
-            if (wallet) {
-                const resp = await wallet.send(transaction, options ? options.signers : undefined);
-                if (!resp) {
-                    throw new Error('User denied signature request');
-                }
-                return resp;
+            if (!wallet) throw new WalletNotConnectedError();
+
+            const resp = await wallet.send(transaction, options ? options.signers : undefined);
+            if (!resp) {
+                throw new WalletWindowClosedError();
             }
+            return resp;
         } catch (error: any) {
             this.emit('error', error);
             throw error;
         }
-        return await super.sendTransaction(transaction, connection, options);
     }
 
     async signTransaction(transaction: Transaction): Promise<Transaction> {
