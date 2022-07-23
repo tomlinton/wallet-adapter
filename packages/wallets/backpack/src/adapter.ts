@@ -30,7 +30,12 @@ interface BackpackWallet extends EventEmitter<BackpackWalletEvents> {
     isConnected: boolean;
     signTransaction(transaction: Transaction): Promise<Transaction>;
     signAllTransactions(transactions: Transaction[]): Promise<Transaction[]>;
-    send(transaction: Transaction, signers?: Signer[], options?: SendOptions): Promise<TransactionSignature>;
+    send(
+        transaction: Transaction,
+        signers?: Signer[],
+        options?: SendOptions,
+        connection?: Connection
+    ): Promise<TransactionSignature>;
     signMessage(message: Uint8Array): Promise<Uint8Array | null>;
     connect(): Promise<void>;
     disconnect(): Promise<void>;
@@ -167,14 +172,16 @@ export class BackpackWalletAdapter extends BaseMessageSignerWalletAdapter {
 
     async sendTransaction(
         transaction: Transaction,
-        _connection: Connection,
+        connection?: Connection,
         options?: SendTransactionOptions
     ): Promise<TransactionSignature> {
         try {
             const wallet = this._wallet;
             if (!wallet) throw new WalletNotConnectedError();
 
-            const resp = await wallet.send(transaction, options ? options.signers : undefined);
+            const { signers, ...sendOptions } = options ? options : { signers: undefined };
+
+            const resp = await wallet.send(transaction, signers, sendOptions, connection);
             if (!resp) {
                 throw new WalletWindowClosedError();
             }
